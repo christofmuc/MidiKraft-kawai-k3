@@ -133,12 +133,7 @@ namespace midikraft {
 
 	std::vector<MidiMessage> KawaiK3::requestBankDump(MidiBankNumber bankNo) const
 	{
-		// When we request a bank dump from the K3, we always also request the user wave, because if one of the patches
-		// references the wave, we need to know which wave?
-		return {
-			//requestWaveBufferDump(bankNo.toZeroBased() == 0 ? WaveType::USER_WAVE : WaveType::USER_WAVE_CARTRIDGE),
-			buildSysexFunctionMessage(ALL_BLOCK_DATA_REQUEST, (uint8)bankNo.toZeroBased()),
-		};
+		return { buildSysexFunctionMessage(ALL_BLOCK_DATA_REQUEST, (uint8)bankNo.toZeroBased()) };
 	}
 
 	std::vector<juce::MidiMessage> KawaiK3::requestPatch(int patchNo) const
@@ -472,7 +467,16 @@ namespace midikraft {
 		case K3_WAVE:
 			return { requestWaveBufferDump(itemNo == 0 ? WaveType::USER_WAVE : WaveType::USER_WAVE_CARTRIDGE) };
 		case K3_BANK:
-			return requestBankDump(MidiBankNumber::fromZeroBase(itemNo));
+		{
+			bool requestWave = (itemNo % 2) == 0;
+			int bankNo = itemNo / numberOfPatches();
+			if (requestWave) {
+				return { requestWaveBufferDump(bankNo == 0 ? WaveType::USER_WAVE : WaveType::USER_WAVE_CARTRIDGE) };
+			}
+			else {
+				return requestBankDump(MidiBankNumber::fromZeroBase(bankNo));
+			}
+		}
 		default:
 			jassertfalse;
 			return {};
@@ -504,6 +508,48 @@ namespace midikraft {
 		default:
 			return false;
 		}
+	}
+
+	bool KawaiK3::isStreamComplete(std::vector<MidiMessage> const &messages, DataStreamType streamType) const
+	{
+		switch (streamType.asInt())
+		{
+		case K3_PATCH:
+			for (auto message : messages) {
+				if (isSingleProgramDump(message)) {
+					return true;
+				}
+			}
+			break;
+		case K3_WAVE:
+			for (auto message : messages) {
+				if (isWaveBufferDump(message)) {
+					return true;
+				}
+			}
+			break;
+		case K3_BANK:
+		{
+			return isBankDumpFinished(messages);
+		}
+		default:
+			break;
+		}
+		return false;
+	}
+
+	bool KawaiK3::shouldStreamAdvance(std::vector<MidiMessage> const &messages, DataStreamType streamType) const
+	{
+		switch (streamType.asInt()) {
+		case K3_BANK:
+			if (isStreamComplete(messages, DataStreamType(K3_WAVE))) {
+				return true;
+			}
+			break;
+		default:
+			return false;
+		}
+		return false;
 	}
 
 	bool KawaiK3::isPartOfDataFileStream(const MidiMessage &message, DataStreamType dataTypeID) const
@@ -538,7 +584,7 @@ namespace midikraft {
 		return {
 			{ DataStreamType(K3_BANK), friendlyBankName(MidiBankNumber::fromZeroBase(0)), 0 },
 			{ DataStreamType(K3_WAVE), friendlyBankName(MidiBankNumber::fromZeroBase(0)) + " wave", 0 },
-			{ DataStreamType(K3_BANK), friendlyBankName(MidiBankNumber::fromZeroBase(1)), 1 },
+			{ DataStreamType(K3_BANK), friendlyBankName(MidiBankNumber::fromZeroBase(1)), numberOfPatches() },
 			{ DataStreamType(K3_WAVE), friendlyBankName(MidiBankNumber::fromZeroBase(1)) + " wave", 1 },
 		};
 	}

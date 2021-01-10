@@ -128,6 +128,8 @@ namespace midikraft {
 		virtual int numberOfMidiMessagesPerStreamType(DataStreamType dataTypeID) const override;
 		virtual bool isPartOfDataFileStream(const MidiMessage &message, DataStreamType dataTypeID) const override;
 		virtual bool isDataFile(const MidiMessage &message, DataFileType dataTypeID) const override;
+		virtual bool isStreamComplete(std::vector<MidiMessage> const &messages, DataStreamType streamType) const override;
+		virtual bool shouldStreamAdvance(std::vector<MidiMessage> const &messages, DataStreamType streamType) const override;
 		virtual std::vector<std::shared_ptr<DataFile>> loadData(std::vector<MidiMessage> messages, DataStreamType dataTypeID) const override;
 		virtual std::vector<DataFileDescription> dataTypeNames() const override;
 		virtual std::vector<DataFileImportDescription> dataFileImportChoices() const override;

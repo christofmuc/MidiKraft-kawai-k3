@@ -148,7 +148,7 @@ namespace midikraft {
 			jassertfalse;
 			return {};
 		}
-		return {buildSysexFunctionMessage(ONE_BLOCK_DATA_REQUEST, (uint8)patchNo)};
+		return { buildSysexFunctionMessage(ONE_BLOCK_DATA_REQUEST, (uint8)patchNo) };
 	}
 
 	int KawaiK3::numberOfPatches() const
@@ -304,7 +304,7 @@ namespace midikraft {
 					}
 				}
 				else {
-					SimpleLogger::instance()->postMessage((boost::format("Checksum error when loading Kawai K3 patch. Expected %02X but got %02X") % (int) data[34] % (sum & 0xff)).str());
+					SimpleLogger::instance()->postMessage((boost::format("Checksum error when loading Kawai K3 patch. Expected %02X but got %02X") % (int)data[34] % (sum & 0xff)).str());
 				}
 			}
 			else {
@@ -324,7 +324,7 @@ namespace midikraft {
 			// A bank has 50 programs...
 			for (int i = 0; i < 50; i++) {
 				// This is not really efficient, but for now I'd be good with this
-				result.push_back(k3PatchFromSysex(message,i));
+				result.push_back(k3PatchFromSysex(message, i));
 			}
 		}
 		else {
@@ -365,7 +365,7 @@ namespace midikraft {
 					return std::make_shared<KawaiK3Wave>(waveData, MidiProgramNumber::fromZeroBase(waveNo));
 				}
 				else {
-					SimpleLogger::instance()->postMessage((boost::format("Checksum error when loading Kawai K3 wave. Expected %02X but got %02X") % (int) data[64] % (sum & 0xff)).str());
+					SimpleLogger::instance()->postMessage((boost::format("Checksum error when loading Kawai K3 wave. Expected %02X but got %02X") % (int)data[64] % (sum & 0xff)).str());
 				}
 			}
 		}
@@ -430,7 +430,7 @@ namespace midikraft {
 				auto newPatches = patchesFromSysexBank(message);
 				for (auto n : newPatches) {
 					auto newPatch = std::dynamic_pointer_cast<KawaiK3Patch>(n);
-					if (newPatch) {				
+					if (newPatch) {
 						result.push_back(newPatch);
 						if (newPatch->needsUserWave()) {
 							unresolvedUserWave.push_back(newPatch);
@@ -471,6 +471,8 @@ namespace midikraft {
 			return requestPatch(itemNo);
 		case K3_WAVE:
 			return { requestWaveBufferDump(itemNo == 0 ? WaveType::USER_WAVE : WaveType::USER_WAVE_CARTRIDGE) };
+		case K3_BANK:
+			return requestBankDump(MidiBankNumber::fromZeroBase(itemNo));
 		default:
 			jassertfalse;
 			return {};
@@ -481,8 +483,10 @@ namespace midikraft {
 	{
 		switch (dataTypeID) {
 		case K3_PATCH:
-			return numberOfBanks() * numberOfPatches();
+			return 1;
 		case K3_WAVE:
+			return 1;
+		case K3_BANK:
 			return 2;
 		default:
 			jassertfalse;
@@ -497,6 +501,8 @@ namespace midikraft {
 			return isSingleProgramDump(message);
 		case K3_WAVE:
 			return isWaveBufferDump(message);
+		case K3_BANK:
+			return isBankDump(message);
 		default:
 			return false;
 		}
@@ -504,29 +510,24 @@ namespace midikraft {
 
 	std::vector<std::shared_ptr<midikraft::DataFile>> KawaiK3::loadData(std::vector<MidiMessage> messages, int dataTypeID) const
 	{
-		std::vector<std::shared_ptr<midikraft::DataFile>> result;
-		for (auto const &message : messages) {
-			if (isDataFile(message, dataTypeID)) {
-				switch (dataTypeID)
-				{
-				case K3_PATCH:
-					result.push_back(patchFromProgramDumpSysex(message));
-					break;
-				case K3_WAVE:
-					result.push_back(waveFromSysex(message));
-					break;
-				default:
-					jassertfalse;
-					break;
-				}
-			}
-		}
-		return result;
+		// No matter, this should be done by the loadSysex call
+		ignoreUnused(dataTypeID);
+		return const_cast<KawaiK3 *>(this)->loadSysex(messages);
 	}
 
 	std::vector<midikraft::DataFileLoadCapability::DataFileDescription> KawaiK3::dataTypeNames() const
 	{
-		return { { "Patch", true, true}, { "User Wave", true, true} };
+		return { { "Patch", true, true}, { "User Wave", true, true}, { "Bank dump", true, true} };
+	}
+
+	std::vector<midikraft::DataFileLoadCapability::DataFileImportDescription> KawaiK3::dataFileImportChoices() const
+	{
+		return {
+			{ friendlyBankName(MidiBankNumber::fromZeroBase(0)), K3_BANK, 0 },
+			{ friendlyBankName(MidiBankNumber::fromZeroBase(0)) + " wave", K3_WAVE, 0 },
+			{ friendlyBankName(MidiBankNumber::fromZeroBase(1)), K3_BANK, 1 },
+			{ friendlyBankName(MidiBankNumber::fromZeroBase(1)) + " wave", K3_WAVE, 1 },
+		};
 	}
 
 	std::vector<juce::MidiMessage> KawaiK3::dataFileToMessages(std::shared_ptr<DataFile> dataFile, std::shared_ptr<SendTarget> target) const
@@ -602,7 +603,7 @@ namespace midikraft {
 	}
 
 	MidiChannel KawaiK3::getInputChannel() const
-	{	
+	{
 		return channel();
 	}
 
@@ -719,7 +720,7 @@ namespace midikraft {
 			sendPatchToSynth(MidiController::instance(), SimpleLogger::instance(), MidiHelpers::bufferFromMessages({ *patchToSend }));
 		}
 		if (waveToSend) {
-			sendPatchToSynth(MidiController::instance(), SimpleLogger::instance(), MidiHelpers::bufferFromMessages({ *waveToSend}));
+			sendPatchToSynth(MidiController::instance(), SimpleLogger::instance(), MidiHelpers::bufferFromMessages({ *waveToSend }));
 		}
 	}
 

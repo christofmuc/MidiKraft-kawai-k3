@@ -46,7 +46,8 @@ namespace midikraft {
 
 		enum DataFileType {
 			K3_PATCH = 0,
-			K3_WAVE = 1
+			K3_WAVE = 1,
+			K3_BANK
 		};
 
 		enum class WaveType {
@@ -128,6 +129,7 @@ namespace midikraft {
 		virtual bool isDataFile(const MidiMessage &message, int dataTypeID) const override;
 		virtual std::vector<std::shared_ptr<DataFile>> loadData(std::vector<MidiMessage> messages, int dataTypeID) const override;
 		virtual std::vector<DataFileDescription> dataTypeNames() const override;
+		virtual std::vector<DataFileImportDescription> dataFileImportChoices() const override;
 
 		// DataFileSendCapability
 		virtual std::vector<MidiMessage> dataFileToMessages(std::shared_ptr<DataFile> dataFile, std::shared_ptr<SendTarget> target) const override;

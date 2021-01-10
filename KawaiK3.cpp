@@ -136,8 +136,8 @@ namespace midikraft {
 		// When we request a bank dump from the K3, we always also request the user wave, because if one of the patches
 		// references the wave, we need to know which wave?
 		return {
+			//requestWaveBufferDump(bankNo.toZeroBased() == 0 ? WaveType::USER_WAVE : WaveType::USER_WAVE_CARTRIDGE),
 			buildSysexFunctionMessage(ALL_BLOCK_DATA_REQUEST, (uint8)bankNo.toZeroBased()),
-			requestWaveBufferDump(bankNo.toZeroBased() == 0 ? WaveType::USER_WAVE : WaveType::USER_WAVE_CARTRIDGE)
 		};
 	}
 
@@ -464,9 +464,9 @@ namespace midikraft {
 		return sysexFunction(message) == WRITE_COMPLETE;
 	}
 
-	std::vector<juce::MidiMessage> KawaiK3::requestDataItem(int itemNo, int dataTypeID)
+	std::vector<juce::MidiMessage> KawaiK3::requestDataItem(int itemNo, DataStreamType dataTypeID)
 	{
-		switch (dataTypeID) {
+		switch (dataTypeID.asInt()) {
 		case K3_PATCH:
 			return requestPatch(itemNo);
 		case K3_WAVE:
@@ -479,24 +479,36 @@ namespace midikraft {
 		}
 	}
 
-	int KawaiK3::numberOfDataItemsPerType(int dataTypeID) const
+	int KawaiK3::numberOfMidiMessagesPerStreamType(DataStreamType dataTypeID) const
 	{
-		switch (dataTypeID) {
+		switch (dataTypeID.asInt()) {
 		case K3_PATCH:
 			return 1;
 		case K3_WAVE:
 			return 1;
 		case K3_BANK:
-			return 2;
+			return 1;
 		default:
 			jassertfalse;
 			return 0;
 		}
 	}
 
-	bool KawaiK3::isDataFile(const MidiMessage &message, int dataTypeID) const
+	bool KawaiK3::isDataFile(const MidiMessage &message, DataFileType dataTypeID) const
 	{
-		switch (dataTypeID) {
+		switch (dataTypeID.asInt()) {
+		case K3_PATCH:
+			return isSingleProgramDump(message);
+		case K3_WAVE:
+			return isWaveBufferDump(message);
+		default:
+			return false;
+		}
+	}
+
+	bool KawaiK3::isPartOfDataFileStream(const MidiMessage &message, DataStreamType dataTypeID) const
+	{
+		switch (dataTypeID.asInt()) {
 		case K3_PATCH:
 			return isSingleProgramDump(message);
 		case K3_WAVE:
@@ -508,7 +520,7 @@ namespace midikraft {
 		}
 	}
 
-	std::vector<std::shared_ptr<midikraft::DataFile>> KawaiK3::loadData(std::vector<MidiMessage> messages, int dataTypeID) const
+	std::vector<std::shared_ptr<midikraft::DataFile>> KawaiK3::loadData(std::vector<MidiMessage> messages, DataStreamType dataTypeID) const
 	{
 		// No matter, this should be done by the loadSysex call
 		ignoreUnused(dataTypeID);
@@ -517,16 +529,17 @@ namespace midikraft {
 
 	std::vector<midikraft::DataFileLoadCapability::DataFileDescription> KawaiK3::dataTypeNames() const
 	{
-		return { { "Patch", true, true}, { "User Wave", true, true}, { "Bank dump", true, true} };
+		return { { DataFileType(K3_PATCH), "Patch", true, true},
+			{ DataFileType(K3_WAVE), "User Wave", true, true} };
 	}
 
 	std::vector<midikraft::DataFileLoadCapability::DataFileImportDescription> KawaiK3::dataFileImportChoices() const
 	{
 		return {
-			{ friendlyBankName(MidiBankNumber::fromZeroBase(0)), K3_BANK, 0 },
-			{ friendlyBankName(MidiBankNumber::fromZeroBase(0)) + " wave", K3_WAVE, 0 },
-			{ friendlyBankName(MidiBankNumber::fromZeroBase(1)), K3_BANK, 1 },
-			{ friendlyBankName(MidiBankNumber::fromZeroBase(1)) + " wave", K3_WAVE, 1 },
+			{ DataStreamType(K3_BANK), friendlyBankName(MidiBankNumber::fromZeroBase(0)), 0 },
+			{ DataStreamType(K3_WAVE), friendlyBankName(MidiBankNumber::fromZeroBase(0)) + " wave", 0 },
+			{ DataStreamType(K3_BANK), friendlyBankName(MidiBankNumber::fromZeroBase(1)), 1 },
+			{ DataStreamType(K3_WAVE), friendlyBankName(MidiBankNumber::fromZeroBase(1)) + " wave", 1 },
 		};
 	}
 

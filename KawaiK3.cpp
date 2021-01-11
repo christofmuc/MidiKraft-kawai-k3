@@ -575,8 +575,7 @@ namespace midikraft {
 
 	std::vector<midikraft::DataFileLoadCapability::DataFileDescription> KawaiK3::dataTypeNames() const
 	{
-		return { { DataFileType(K3_PATCH), "Patch", true, true},
-			{ DataFileType(K3_WAVE), "User Wave", true, true} };
+		return { { DataFileType(K3_PATCH), "Patch" }, { DataFileType(K3_WAVE), "User Wave" } };
 	}
 
 	std::vector<midikraft::DataFileLoadCapability::DataFileImportDescription> KawaiK3::dataFileImportChoices() const

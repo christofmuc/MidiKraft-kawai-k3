@@ -38,7 +38,8 @@ namespace midikraft {
 	class KawaiK3Control;
 	class SynthView;
 
-	class KawaiK3 : public Synth, public SupportedByBCR2000, public SimpleDiscoverableDevice, public HasBanksCapability, public ProgramDumpCabability, public BankDumpCapability,
+	class KawaiK3 : public Synth, public SupportedByBCR2000, public SimpleDiscoverableDevice, public HasBanksCapability, public ProgramDumpCabability, 
+		public BankDumpRequestCapability, public BankDumpCapability,
 		public DataFileLoadCapability, public DataFileSendCapability, public DetailedParametersCapability, public BidirectionalSyncCapability,
 		public SendsProgramChangeCapability, public CreateInitPatchDataCapability,
 		public ReadonlySoundExpander, public AdditiveCapability, public HybridWaveCapability {
@@ -68,6 +69,7 @@ namespace midikraft {
 		virtual int numberOfBanks() const override;
 		virtual int numberOfPatches() const override;
 		virtual std::string friendlyBankName(MidiBankNumber bankNo) const override;
+		virtual std::vector<juce::MidiMessage> bankSelectMessages(MidiBankNumber bankNo) const override;
 
 		// Special Synth implementation override, because the K3 sends actually write confirmation messages in 1985. Awesome engineers!
 		virtual void sendDataFileToSynth(std::shared_ptr<DataFile> dataFile, std::shared_ptr<SendTarget> target) override;
@@ -85,12 +87,14 @@ namespace midikraft {
 		virtual MidiProgramNumber getProgramNumber(const std::vector<MidiMessage> &message) const override;
 		virtual std::shared_ptr<DataFile> patchFromProgramDumpSysex(const std::vector<MidiMessage>& message) const override;
 		virtual std::vector<MidiMessage> patchToProgramDumpSysex(std::shared_ptr<DataFile> patch, MidiProgramNumber programNumber) const override;
-		virtual TPatchVector patchesFromSysexBank(const MidiMessage& message) const override;
+
+		// BankDumpRequestCapability
+		virtual std::vector<MidiMessage> requestBankDump(MidiBankNumber bankNo) const override;
 
 		// Bank Dump Capability
-		virtual std::vector<MidiMessage> requestBankDump(MidiBankNumber bankNo) const override;
 		virtual bool isBankDump(const MidiMessage& message) const override;
 		virtual bool isBankDumpFinished(std::vector<MidiMessage> const &bankDump) const override;
+		virtual TPatchVector patchesFromSysexBank(std::vector<MidiMessage> const& messages) const override;
 
 		// SoundExpanderCapability
 		virtual MidiChannel getInputChannel() const override;
@@ -148,7 +152,7 @@ namespace midikraft {
 		virtual Synth::PatchData createInitPatch() override;
 
 	private:
-		void sendPatchToSynth(MidiController* controller, SimpleLogger* logger, MidiBuffer const& messages);
+		void sendPatchToSynth(MidiController* controller, MidiBuffer const& messages);
 
 		friend class KawaiK3Control;
 		friend class KawaiK3Parameter;

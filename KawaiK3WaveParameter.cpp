@@ -11,11 +11,11 @@
 
 #include "MidiHelpers.h"
 
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 namespace midikraft {
 
-	KawaiK3DrawbarParameters::KawaiK3DrawbarParameters(unsigned int harmonic) : drawbar_(Drawbar(DrawbarOrgan::hammondDrawbars()[0]))
+	KawaiK3DrawbarParameters::KawaiK3DrawbarParameters(int harmonic) : drawbar_(Drawbar(DrawbarOrgan::hammondDrawbars()[0]))
 	{
 		// Let's see if we find it in the Hammond definition
 		for (auto hammond : DrawbarOrgan::hammondDrawbars()) {
@@ -46,7 +46,7 @@ namespace midikraft {
 	{
 		int outValue;
 		if (valueInPatch(patch, outValue)) {
-			return (boost::format("Drawbar %s at %d") % drawbar_.name_ % outValue).str();
+			return fmt::format("Drawbar {} at {}", drawbar_.name_, outValue);
 		}
 		return "invalid";
 	}
@@ -72,7 +72,7 @@ namespace midikraft {
 		switch (patch.dataTypeID()) {
 		case KawaiK3::K3_PATCH: {
 			if (patch.data().size() != 98) return false;
-			for (int i = 34; i < 64 + 34; i += 2) {
+			for (size_t i = 34; i < 64 + 34; i += 2) {
 				uint8 harmonic = patch.data()[i];
 				if (harmonic == drawbar_.harmonic_number_) {
 					outValue = patch.data()[i + 1];
@@ -143,7 +143,7 @@ namespace midikraft {
 		if (harmonics.harmonics().size() > 0) {
 			std::string result;
 			for (auto harmonic : harmonics.harmonics()) {
-				result += (boost::format("#%d %d ") % harmonic.first % harmonic.second).str();
+				result += fmt::format("#{} {} ", harmonic.first, harmonic.second);
 			}
 			return result;
 		}

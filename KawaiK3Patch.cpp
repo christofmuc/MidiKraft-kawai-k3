@@ -11,12 +11,10 @@
 #include "KawaiK3.h"
 #include "KawaiK3Wave.h"
 
-#include <boost/format.hpp>
-
 namespace midikraft {
 
 	KawaiK3Patch::KawaiK3Patch(MidiProgramNumber programNo, Synth::PatchData const &patchdata) 
-		: Patch(programNo.toZeroBased() >= 100 ? KawaiK3::K3_WAVE : KawaiK3::K3_PATCH, patchdata), number_(programNo)
+		: Patch(programNo.toZeroBasedDiscardingBank() >= 100 ? KawaiK3::K3_WAVE : KawaiK3::K3_PATCH, patchdata), number_(programNo)
 	{
 	}
 
@@ -44,13 +42,6 @@ namespace midikraft {
 		}
 
 		return patch;
-	}
-
-	std::string KawaiK3Patch::name() const
-	{
-		// The Kawai K3 is so old is has no display to display a patch name, hence, also none stored in the patch data
-		KawaiK3 k3;
-		return k3.friendlyProgramName(number_); //TODO could do static call
 	}
 
 	MidiProgramNumber KawaiK3Patch::patchNumber() const {

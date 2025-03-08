@@ -21,7 +21,8 @@
 
 #include "BinaryResources.h"
 
-#include <boost/format.hpp>
+#include <spdlog/spdlog.h>
+#include <fmt/format.h>
 
 namespace midikraft {
 
@@ -158,11 +159,11 @@ namespace midikraft {
 
 	std::string KawaiK3::friendlyProgramName(MidiProgramNumber programNo) const
 	{
-		switch (programNo.toZeroBased()) {
+		switch (programNo.toZeroBasedDiscardingBank()) {
 		case 100: return "Internal Wave";
 		case 101: return "Cartridge Wave";
 		default:
-			return (boost::format("%02d") % programNo.toOneBased()).str();
+			return fmt::format("{:02d}", programNo.toOneBasedWithBank());
 		}
 	}
 
@@ -180,7 +181,7 @@ namespace midikraft {
 		if (isSingleProgramDump(message)) {
 			return MidiProgramNumber::fromZeroBase(sysexSubcommand(message[0]));
 		}
-		return MidiProgramNumber::fromZeroBase(0);
+		return MidiProgramNumber::invalidProgram();
 	}
 
 	juce::MidiMessage KawaiK3::requestWaveBufferDump(WaveType waveType) const
@@ -233,6 +234,11 @@ namespace midikraft {
 		}
 	}
 
+	std::vector<juce::MidiMessage> KawaiK3::bankSelectMessages(MidiBankNumber bankNo) const {
+		ignoreUnused(bankNo);
+		return {};
+	}
+
 	std::shared_ptr<DataFile> KawaiK3::patchFromPatchData(const Synth::PatchData &data, MidiProgramNumber place) const {
 
 		if (data.size() == 34 || data.size() == 98) {
@@ -265,7 +271,7 @@ namespace midikraft {
 
 	std::vector<juce::MidiMessage> KawaiK3::patchToProgramDumpSysex(std::shared_ptr<DataFile> patch, MidiProgramNumber programNumber) const
 	{
-		return { k3PatchToSysex(patch->data(), programNumber.toZeroBased(), false) };
+		return { k3PatchToSysex(patch->data(), programNumber.toZeroBasedDiscardingBank(), false) };
 	}
 
 	std::shared_ptr<Patch> KawaiK3::k3PatchFromSysex(const MidiMessage& message, int indexIntoBankDump /* = 0 */) const {
@@ -279,7 +285,7 @@ namespace midikraft {
 			while (readIndex < message.getSysExDataSize() - 1 && readBytes < 35) {
 				uint8 highNibble = rawData[readIndex];
 				uint8 lowNibble = rawData[readIndex + 1];
-				uint8 value = ((highNibble & 0x0f) << 4) | (lowNibble & 0x0f);
+				uint8 value = (uint8)((highNibble & 0x0f) << 4) | (lowNibble & 0x0f);
 				data.push_back(value);
 				readIndex += 2;
 				readBytes++;
@@ -289,7 +295,7 @@ namespace midikraft {
 			if (data.size() == 35) {
 				int sum = 0;
 				std::vector<uint8> toneData;
-				for (int i = 0; i < 34; i++) {
+				for (size_t i = 0; i < 34; i++) {
 					sum += data[i];
 					toneData.push_back(data[i]);
 				}
@@ -304,31 +310,33 @@ namespace midikraft {
 					}
 				}
 				else {
-					SimpleLogger::instance()->postMessage((boost::format("Checksum error when loading Kawai K3 patch. Expected %02X but got %02X") % (int) data[34] % (sum & 0xff)).str());
+					spdlog::error("Checksum error when loading Kawai K3 patch. Expected {:02X} but got {:02X}", (int) data[34], (sum & 0xff));
 				}
 			}
 			else {
-				SimpleLogger::instance()->postMessage((boost::format("Invalid length of data while loading Kawai K3 patch. Expected 35 bytes but got %02X") % data.size()).str());
+				spdlog::error("Invalid length of data while loading Kawai K3 patch. Expected 35 bytes but got {}", data.size());
 			}
 		}
 		else {
-			SimpleLogger::instance()->postMessage("MIDI message is neither single program dump nor bank dump from Kawai K3, ignoring data!");
+			spdlog::info("MIDI message is neither single program dump nor bank dump from Kawai K3, ignoring data!");
 		}
 		return {};
 	}
 
-	TPatchVector KawaiK3::patchesFromSysexBank(const MidiMessage& message) const
+	TPatchVector KawaiK3::patchesFromSysexBank(std::vector<MidiMessage> const& messages) const
 	{
 		TPatchVector result;
-		if (isBankDumpAndNotWaveDump(message)) {
-			// A bank has 50 programs...
-			for (int i = 0; i < 50; i++) {
-				// This is not really efficient, but for now I'd be good with this
-				result.push_back(k3PatchFromSysex(message,i));
+		for (auto const& message : messages) {
+			if (isBankDumpAndNotWaveDump(message)) {
+				// A bank has 50 programs...
+				for (int i = 0; i < 50; i++) {
+					// This is not really efficient, but for now I'd be good with this
+					result.push_back(k3PatchFromSysex(message, i));
+				}
 			}
-		}
-		else {
-			jassertfalse;
+			else {
+				spdlog::error("Failed to convert MIDI message to K3 patches, program error?");
+			}
 		}
 		return result;
 	}
@@ -344,7 +352,7 @@ namespace midikraft {
 			while (readIndex < message.getSysExDataSize() - 1 && readBytes < 65) {
 				uint8 highNibble = rawData[readIndex];
 				uint8 lowNibble = rawData[readIndex + 1];
-				uint8 value = ((highNibble & 0x0f) << 4) | (lowNibble & 0x0f);
+				uint8 value = (uint8)((highNibble & 0x0f) << 4) | (lowNibble & 0x0f);
 				data.push_back(value);
 				readIndex += 2;
 				readBytes++;
@@ -365,7 +373,7 @@ namespace midikraft {
 					return std::make_shared<KawaiK3Wave>(waveData, MidiProgramNumber::fromZeroBase(waveNo));
 				}
 				else {
-					SimpleLogger::instance()->postMessage((boost::format("Checksum error when loading Kawai K3 wave. Expected %02X but got %02X") % (int) data[64] % (sum & 0xff)).str());
+					spdlog::error("Checksum error when loading Kawai K3 wave. Expected {:02X} but got {:02X}", (int) data[64], (sum & 0xff));
 				}
 			}
 		}
@@ -427,7 +435,7 @@ namespace midikraft {
 				}
 			}
 			else if (isBankDumpAndNotWaveDump(message)) {
-				auto newPatches = patchesFromSysexBank(message);
+				auto newPatches = patchesFromSysexBank({ message });
 				for (auto n : newPatches) {
 					auto newPatch = std::dynamic_pointer_cast<KawaiK3Patch>(n);
 					if (newPatch) {				
@@ -453,7 +461,7 @@ namespace midikraft {
 		}
 		if (!unresolvedUserWave.empty()) {
 			for (auto patch : unresolvedUserWave) {
-				SimpleLogger::instance()->postMessage((boost::format("No user wave recorded for programmable oscillator of patch '%s', sound can not be reproduced") % patch->name()).str());
+				spdlog::info("No user wave recorded for programmable oscillator of patch '{}', sound can not be reproduced", nameForPatch(patch));
 			}
 		}
 		return result;
@@ -536,7 +544,7 @@ namespace midikraft {
 		switch (dataFile->dataTypeID())
 		{
 		case K3_PATCH:
-			return { k3PatchToSysex(dataFile->data(), kFakeEditBuffer.toZeroBased(), false), k3PatchToSysex(dataFile->data(), static_cast<int>(WaveType::USER_WAVE), true) };
+			return { k3PatchToSysex(dataFile->data(), kFakeEditBuffer.toZeroBasedDiscardingBank(), false), k3PatchToSysex(dataFile->data(), static_cast<int>(WaveType::USER_WAVE), true) };
 		case K3_WAVE:
 			return { k3PatchToSysex(dataFile->data(), 100, false) };
 		default:
@@ -548,7 +556,7 @@ namespace midikraft {
 	std::vector<std::shared_ptr<midikraft::SynthParameterDefinition>> KawaiK3::allParameterDefinitions() const
 	{
 		Synth::PatchData data;
-		KawaiK3Patch fake(MidiProgramNumber::fromZeroBase(0), data);
+		KawaiK3Patch fake(MidiProgramNumber::invalidProgram(), data);
 		return fake.allParameterDefinitions();
 	}
 
@@ -650,34 +658,34 @@ namespace midikraft {
 		//wave1_.displaySampledWave(samples);
 		auto wave = std::make_shared<KawaiK3Wave>(selectedHarmonics, MidiProgramNumber::fromZeroBase(static_cast<int>(WaveType::USER_WAVE)));
 		auto userWave = waveToSysex(wave);
-		SimpleLogger::instance()->postMessage((boost::format("Sending user wave for registration %s to K3") % name).str());
+		spdlog::debug("Sending user wave for registration {} to K3", name);
 		ignoreUnused(currentPatch);
-		//sendK3Wave(MidiController::instance(), MidiController::instance(), SimpleLogger::instance(), currentPatch, userWave);
+		//sendK3Wave(MidiController::instance(), MidiController::instance(), currentPatch, userWave);
 	}
 
 	void KawaiK3::sendDataFileToSynth(std::shared_ptr<DataFile> dataFile, std::shared_ptr<SendTarget> target) {
 		ignoreUnused(target);
 		auto wave = std::dynamic_pointer_cast<KawaiK3Wave>(dataFile);
 		if (wave) {
-			SimpleLogger::instance()->postMessage("Writing K3 user wave to the internal wave memory");
+			spdlog::info("Writing K3 user wave to the internal wave memory");
 		}
 		else {
-			SimpleLogger::instance()->postMessage((boost::format("Writing K3 patch '%s' to program %s") % dataFile->name() % friendlyProgramName(kFakeEditBuffer)).str());
+			spdlog::info("Writing K3 patch '{}' to program {}", nameForPatch(dataFile), friendlyProgramName(kFakeEditBuffer));
 		}
 		MidiBuffer messages = MidiHelpers::bufferFromMessages(dataFileToMessages(dataFile, target));
-		sendPatchToSynth(MidiController::instance(), SimpleLogger::instance(), messages);
+		sendPatchToSynth(MidiController::instance(), messages);
 	}
 
-	void KawaiK3::sendPatchToSynth(MidiController * controller, SimpleLogger * logger, MidiBuffer const &messages) {
+	void KawaiK3::sendPatchToSynth(MidiController * controller, MidiBuffer const &messages) {
 		auto secondHandler = MidiController::makeOneHandle();
-		MidiController::instance()->addMessageHandler(secondHandler, [this, logger, controller, secondHandler](MidiInput *source, MidiMessage const &message) {
+		MidiController::instance()->addMessageHandler(secondHandler, [this, controller, secondHandler](MidiInput *source, MidiMessage const &message) {
 			ignoreUnused(source);
 			if (isWriteConfirmation(message)) {
 				MidiController::instance()->removeMessageHandler(secondHandler);
-				logger->postMessage("Got patch write confirmation from K3");
+				spdlog::info("Got patch write confirmation from K3");
 				MidiBuffer midiBuffer;
                 midiBuffer.addEvent(MidiMessage::programChange(channel().toOneBasedInt(), 1), 1); // Any program can be used
-                midiBuffer.addEvent(MidiMessage::programChange(channel().toOneBasedInt(), kFakeEditBuffer.toZeroBased()), 2);
+                midiBuffer.addEvent(MidiMessage::programChange(channel().toOneBasedInt(), kFakeEditBuffer.toZeroBasedDiscardingBank()), 2);
 				controller->getMidiOutput(midiOutput())->sendBlockOfMessagesFullSpeed(midiBuffer);
 				// We ignore the result of these sends, just hope for the best
 			}
@@ -715,10 +723,10 @@ namespace midikraft {
 		// Send the filtered stuff
 		midiOut->sendBlockOfMessagesFullSpeed(MidiHelpers::bufferFromMessages(filtered));
 		if (patchToSend) {
-			sendPatchToSynth(MidiController::instance(), SimpleLogger::instance(), MidiHelpers::bufferFromMessages({ *patchToSend }));
+			sendPatchToSynth(MidiController::instance(), MidiHelpers::bufferFromMessages({ *patchToSend }));
 		}
 		if (waveToSend) {
-			sendPatchToSynth(MidiController::instance(), SimpleLogger::instance(), MidiHelpers::bufferFromMessages({ *waveToSend}));
+			sendPatchToSynth(MidiController::instance(), MidiHelpers::bufferFromMessages({ *waveToSend}));
 		}
 	}
 
@@ -727,7 +735,7 @@ namespace midikraft {
 		if (!channel().isValid()) return;
 
 		// Use MIDI channel 16 to not interfere with any other MIDI hardware accidentally taking the CC messages for real
-		std::string presetName = (boost::format("Knobkraft %s %d") % getName() % channel().toOneBasedInt()).str();
+		std::string presetName = fmt::format("Knobkraft {} {}", getName(), channel().toOneBasedInt());
 		auto bcl = KawaiK3BCR2000::generateBCL(presetName, bcr.channel(), channel());
 		auto syx = bcr.convertToSyx(bcl);
 		MidiController::instance()->enableMidiInput(bcr.midiInput()); // Make sure we listen to the answers from the BCR2000 that we detected!

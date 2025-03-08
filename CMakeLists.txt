@@ -42,11 +42,11 @@ set_source_files_properties(
 
 # Setup library
 add_library(midikraft-kawai-k3 ${Sources})
-target_include_directories(midikraft-kawai-k3 PUBLIC ${CMAKE_CURRENT_LIST_DIR} PRIVATE ${boost_SOURCE_DIR} "${icu_SOURCE_DIR}/include")
+target_include_directories(midikraft-kawai-k3 PUBLIC ${CMAKE_CURRENT_LIST_DIR} PRIVATE "${icu_SOURCE_DIR}/include")
 if(WIN32)
 	target_link_directories(midikraft-kawai-k3 PUBLIC "${icu_SOURCE_DIR}/lib64")
 endif()
-target_link_libraries(midikraft-kawai-k3 juce-utils midikraft-base midikraft-behringer-bcr2000 ${APPLE_BOOST})
+target_link_libraries(midikraft-kawai-k3 juce-utils midikraft-base midikraft-behringer-bcr2000 spdlog::spdlog)
 
 # Pedantic about warnings
 if (MSVC)
@@ -54,5 +54,5 @@ if (MSVC)
     target_compile_options(midikraft-kawai-k3 PRIVATE /W4 /WX)
 else()
     # lots of warnings and all warnings as errors
-    #target_compile_options(midikraft-kawai-k3 PRIVATE -Wall -Wextra -pedantic -Werror)
+    target_compile_options(midikraft-kawai-k3 PRIVATE -Wall -Wextra -pedantic -Werror)
 endif()
